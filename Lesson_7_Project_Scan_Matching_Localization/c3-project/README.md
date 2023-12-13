@@ -31,23 +31,28 @@
 
 
 
-4. Update the ** c3-main.cpp** file per the `TODO` markers and the classroom instructions. 
+4. Update the `c3-main.cpp` file per the `TODO` markers and the classroom instructions. 
 
 
 5. Compile the project using the following commands. 
 
     ```bash
-    cmake .
+    mkdir build && cd build
+    cmake ..
     make
     ```
-    These steps will generate the **clooud_loc** executable. 
+    These steps will generate the `cloud_loc` executable. 
 
 
 6. Open a new Terminal tab and execute the following command to start the simulator.
 
     ```bash
     ./run_carla.sh
-    ```  
+    ```
+   The carla simulator can be killed with:
+   ```bash
+   pgrep -f carla | xargs -r kill -9
+   ```
 
 
 7. Open another Terminal tab and execute the following to run the project.
