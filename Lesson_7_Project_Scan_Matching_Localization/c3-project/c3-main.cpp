@@ -109,7 +109,6 @@ Eigen::Matrix4d ICP(PointCloudT::Ptr target, PointCloudT::Ptr source, Pose start
     icp.setInputSource(transformSource);
     icp.setInputTarget(target);
     icp.setTransformationEpsilon(1e-8);
-    icp.setMaxCorrespondenceDistance(2);
 
     PointCloudT::Ptr cloud_icp(new PointCloudT); // ICP output point cloud
     icp.align(*cloud_icp);
@@ -122,6 +121,27 @@ Eigen::Matrix4d ICP(PointCloudT::Ptr target, PointCloudT::Ptr source, Pose start
         return transformation_matrix;
     } else
         cout << "WARNING: ICP did not converge" << endl;
+    return transformation_matrix;
+}
+
+// ICP Function, adapted from Utilizing Scan Matching lesson.
+Eigen::Matrix4d NDT(PointCloudT::Ptr target, PointCloudT::Ptr source, Pose startingPose, int iterations) {
+    pcl::NormalDistributionsTransform<pcl::PointXYZ, pcl::PointXYZ> ndt;
+    ndt.setTransformationEpsilon(1e-8);
+    ndt.setResolution(1);
+    ndt.setInputTarget(target);
+
+    pcl::console::TicToc time;
+    time.tic();
+    Eigen::Matrix4f init_guess = transform3D(startingPose.rotation.yaw, startingPose.rotation.pitch, startingPose.rotation.roll, startingPose.position.x, startingPose.position.y, startingPose.position.z).cast<float>();
+
+    ndt.setMaximumIterations(iterations);
+    ndt.setInputSource(source);
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_ndt(new pcl::PointCloud<pcl::PointXYZ>);
+    ndt.align(*cloud_ndt, init_guess);
+    cout << "NDT has converged: " << ndt.hasConverged() << " score: " << ndt.getFitnessScore() << " time: " << time.toc() << " ms" << endl;
+    Eigen::Matrix4d transformation_matrix = ndt.getFinalTransformation().cast<double>();
     return transformation_matrix;
 }
 
@@ -190,7 +210,6 @@ int main() {
     Pose poseRef(Point(vehicle->GetTransform().location.x, vehicle->GetTransform().location.y, vehicle->GetTransform().location.z), Rotate(vehicle->GetTransform().rotation.yaw * pi / 180, vehicle->GetTransform().rotation.pitch * pi / 180, vehicle->GetTransform().rotation.roll * pi / 180));
     double maxError = 0;
 
-    bool first = true;
     while (!viewer->wasStopped()) {
         while (new_scan) {
             std::this_thread::sleep_for(0.1s);
@@ -222,14 +241,8 @@ int main() {
         viewer->spinOnce();
 
         if (!new_scan) {
-            if (first) {
-                // On the first scan let's not start at a useless position
-                pose.position = truePose.position;
-                pose.rotation = truePose.rotation;
-            }
-            first = false;
-
             new_scan = true;
+
             // DONE: (Filter scan using voxel filter)
             pcl::VoxelGrid<PointT> vg;
             vg.setInputCloud(scanCloud);
@@ -237,10 +250,19 @@ int main() {
             vg.setLeafSize(filterRes, filterRes, filterRes);
             vg.filter(*cloudFiltered);
 
-            pose = Pose(Point(vehicle->GetTransform().location.x, vehicle->GetTransform().location.y, vehicle->GetTransform().location.z), Rotate(vehicle->GetTransform().rotation.yaw * pi / 180, vehicle->GetTransform().rotation.pitch * pi / 180, vehicle->GetTransform().rotation.roll * pi / 180)) - poseRef;
-
             // DONE: Find pose transform by using ICP or NDT matching
-            Eigen::Matrix4d transform = ICP(mapCloud, cloudFiltered, pose, 500);
+
+            // Initial pose based on vehicle
+            pose = Pose(
+                       Point(vehicle->GetTransform().location.x, vehicle->GetTransform().location.y, vehicle->GetTransform().location.z),
+                       Rotate(vehicle->GetTransform().rotation.yaw * pi / 180, vehicle->GetTransform().rotation.pitch * pi / 180, vehicle->GetTransform().rotation.roll * pi / 180)) -
+                   poseRef;
+
+            // Do ICP/NDT
+            // Eigen::Matrix4d transform = ICP(mapCloud, cloudFiltered, pose, 8);
+            Eigen::Matrix4d transform = NDT(mapCloud, cloudFiltered, pose, 60);
+
+            // Get the pose from the transformation
             pose = getPose(transform);
 
             // DONE: Transform scan so it aligns with ego's actual pose and render that scan
