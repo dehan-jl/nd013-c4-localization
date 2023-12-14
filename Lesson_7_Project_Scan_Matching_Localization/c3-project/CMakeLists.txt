@@ -33,5 +33,5 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 add_executable(cloud_loc ${sources} )
-
+set_target_properties(cloud_loc PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/..)
 target_link_libraries(cloud_loc ${PCL_LIBRARIES} ${carla_libs})
